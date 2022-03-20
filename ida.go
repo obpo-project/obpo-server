@@ -49,7 +49,7 @@ func getArchBinary(arch TaskArch) string {
 	return ""
 }
 
-func copy(src string, dest string) error {
+func fileCopy(src string, dest string) error {
 	bytesRead, err := ioutil.ReadFile(src)
 
 	if err != nil {
@@ -84,14 +84,14 @@ func RunOBPO(requestJson string) (response string) {
 	} else {
 		binaryPath += ".idb"
 	}
-	err = copy(binary, binaryPath)
+	err = fileCopy(binary, binaryPath)
 	if err != nil {
 		println("Copy binary error: " + err.Error())
 		return "-3"
 	}
 
-	scriptPath := filepath.Join(tmpDir, "ida_script.py")
-	err = copy(GetOBPOScriptPath(), scriptPath)
+	scriptPath := filepath.Join(tmpDir, "obpo_script.py")
+	err = fileCopy(GetOBPOScriptPath(), scriptPath)
 	if err != nil {
 		println("Copy script error: " + err.Error())
 		return "-4"
