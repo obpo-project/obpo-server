@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"github.com/gin-gonic/gin"
 	"io/ioutil"
 	"net/http"
@@ -33,7 +34,15 @@ func setupRouter() *gin.Engine {
 	return r
 }
 
+func listen() string {
+	listen := ":10000"
+	flag.StringVar(&listen, "l", ":10000", "listen address, default is :10000")
+	flag.Parse()
+	return listen
+}
+
 func main() {
+
 	r := setupRouter()
-	_ = r.Run(":10000")
+	_ = r.Run(listen())
 }
