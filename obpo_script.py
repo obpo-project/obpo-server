@@ -8,22 +8,36 @@ import logging
 from idaapi import *
 from idc import *
 from obpo.analysis.dispatcher import DispatchAnalyzer
-from obpo.analysis.pathfinder import FlowFinder
+from obpo.analysis.pathfinder import FlowFinder, EmuPathFinder
 from obpo.patch.deoptimizer import SplitCommonPatcher
 from obpo.patch.link import FlowPatcher
 
-seg_class = {SEG_CODE: "CODE",
-             SEG_DATA: "DATA",
-             SEG_BSS: "BSS",
-             SEG_XTRN: "XTRN",
-             SEG_COMM: "COMM",
-             SEG_ABSSYM: "ABS"}
+TASK_PATH = ARGV[1]
+TASK_DIR = os.path.dirname(TASK_PATH)
+
+
+def _safe_call(f):
+    try:
+        return f()
+    except:
+        pass
+
+
+def warning(s):
+    with open(os.path.join(TASK_DIR, "warn"), 'a') as o:
+        o.write(s + "\n")
+
+
+def error(s):
+    with open(os.path.join(TASK_DIR, "error"), 'a') as o:
+        o.write(s + "\n")
 
 
 def visit_blocks(mba: mba_t):
     for i in range(mba.qty):
         mblock = mba.get_mblock(i)
         yield mblock
+
 
 def debug_mode(path):
     logger = logging.getLogger("OBPO")
@@ -35,25 +49,27 @@ def prepare_mc(funcs, level):
     x = []
     try:
         mbr = mba_ranges_t()
+        hf = hexrays_failure_t()
+        ml = mlist_t()
         for ea in funcs:
             start = int(ea)
             end = start + len(funcs[ea])
-            hf = hexrays_failure_t()
             mbr.ranges.push_back(range_t(start, end))
-        ml = mlist_t()
         mba = gen_microcode(mbr, hf, ml, DECOMP_WARNINGS, level)
         x.append(mba)
     except:
         pass
-    try:
-        for ea in funcs:
-            try:
-                x.append(decompile(int(ea)))
-            except:
-                pass
-    except:
-        pass
+    for ea in funcs:
+        x.append(_safe_call(lambda: decompile(int(ea))))
     return x
+
+
+seg_class = {SEG_CODE: "CODE",
+             SEG_DATA: "DATA",
+             SEG_BSS: "BSS",
+             SEG_XTRN: "XTRN",
+             SEG_COMM: "COMM",
+             SEG_ABSSYM: "ABS"}
 
 
 def create_segments(segments):
@@ -89,6 +105,45 @@ def create_func(func_bytes, T):
         auto_wait()
 
 
+def finder_hooks(finder):
+    orig_explore = finder._finder_by_explore
+
+    def explore_hook(d):
+        incomplete = orig_explore(d)
+        if incomplete:
+            warning("explore is incomplete and uses aggressive exploration technology. \n"
+                    "[!] note that the control flow may be wrong")
+        return incomplete
+
+    finder._finder_by_explore = explore_hook
+
+
+def emufinder_hooks():
+    orig_emufinder_run = EmuPathFinder.run
+
+    def emufinder_run_hook(self):
+        res = orig_emufinder_run(self)
+        if not self.results:
+            warning("cannot found succs for {}".format(hex(self.source.blk.start)))
+        return res
+
+    EmuPathFinder.run = emufinder_run_hook
+
+
+def patcher_hooks(patcher):
+    orig_run = patcher.run
+
+    def run_hook(edge, flows):
+        success = orig_run(edge, flows)
+        if not success:
+            _from = hex(edge.src.start)
+            _to = {hex(flow.dest_block.start) for flow in flows}
+            warning("cannot patch edges from {} to {}".format(_from, _to))
+        return success
+
+    patcher.run = run_hook
+
+
 def prepare():
     task_path = ARGV[1]
     task = open(task_path).read()
@@ -99,30 +154,53 @@ def prepare():
 
 
 def main():
-    task_path = ARGV[1]
-    debug_mode(os.path.join(os.path.dirname(task_path), "log.txt"))
+    # Prepare environment for microcode
+    debug_mode(os.path.join(TASK_DIR, "log.txt"))
     task = prepare()
-    x = prepare_mc(task["func"], task["maturity"])
+    x = prepare_mc(task["func"], task["maturity"])  # save decompile references to avoid some crash
     mba: mba_t = mba_t_deserialize(base64.b64decode(task['mba']))
+    if mba is None:
+        error("load mba failed.")
+        return
+
+    # Dispatch Analysis
     analyzer = DispatchAnalyzer(mba=mba)
-    for ea in task["dispatchers"]:
-        try:
-            analyzer.mark_dispatcher(ea)
-        except:
-            pass
-    analyzer.run()
+    for ea in task["dispatchers"]: analyzer.mark_dispatcher(ea)
+    try:
+        analyzer.run()
+    except:
+        error("cannot to analysis dispatcher")
+        return
+
+    # Real Control Flow Finder
+    emufinder_hooks()
     finder = FlowFinder(analyzer)
-    finder.run()
+    finder_hooks(finder)
+    try:
+        finder.run()
+    except:
+        logging.getLogger("OBPO").exception("exception in flow finder")
+        warning("exception in flow finder, the control flow maybe wrong")
+
+    # Recovering Control Flow Edges
     SplitCommonPatcher(finder).run()
     patcher = FlowPatcher(analyzer)
-    for edge, flows in finder.edge4flows().items():
-        patcher.run(edge, flows)
+    patcher_hooks(patcher)
+    try:
+        for edge, flows in finder.edge4flows().items():
+            patcher.run(edge, flows)
+    except:
+        logging.getLogger("OBPO").exception("exception in flow patcher")
+        warning("exception in flow patcher, the code maybe not clean")
+
+    # Clear graph to bypass verify mba
     for b in visit_blocks(mba):
         if b.type in [BLT_STOP, BLT_XTRN] or b.serial == 0: continue
         b.type = BLT_NONE
         b.mark_lists_dirty()
+
     result = base64.b64encode(mba.serialize())
-    with open(os.path.join(os.path.dirname(task_path), "result"), "w") as out:
+    with open(os.path.join(os.path.dirname(TASK_PATH), "mba"), "w") as out:
         out.write(result.decode())
     return mba
 

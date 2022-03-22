@@ -1,23 +1,39 @@
 package main
 
 import (
+	"encoding/json"
+	"github.com/gin-gonic/gin"
 	"io/ioutil"
 	"net/http"
-
-	"github.com/gin-gonic/gin"
 )
+
+type ResultData struct {
+	Mba string `json:"mba"`
+}
+
+type Response struct {
+	Code  int        `json:"code"`
+	Error string     `json:"error"`
+	Warn  string     `json:"warn"`
+	Data  ResultData `json:"data"`
+}
 
 func setupRouter() *gin.Engine {
 	r := gin.Default()
 
 	r.POST("/request", func(c *gin.Context) {
-		content, _ := ioutil.ReadAll(c.Request.Body)
-		c.String(http.StatusOK, RunOBPO(string(content)))
+		request, _ := ioutil.ReadAll(c.Request.Body)
+		response, err := json.Marshal(process(string(request)))
+		if err != nil {
+			c.String(http.StatusBadGateway, `{"code": 502}`)
+		} else {
+			c.String(http.StatusOK, string(response))
+		}
 	})
 	return r
 }
 
 func main() {
 	r := setupRouter()
-	r.Run(":10000")
+	_ = r.Run(":10000")
 }
