@@ -108,8 +108,8 @@ def create_func(func_bytes, T):
 def finder_hooks(finder):
     orig_explore = finder._finder_by_explore
 
-    def explore_hook(d):
-        incomplete = orig_explore(d)
+    def explore_hook():
+        incomplete = orig_explore()
         if incomplete:
             warning("explore is incomplete and uses aggressive exploration technology. \n"
                     "[!] note that the control flow may be wrong")
