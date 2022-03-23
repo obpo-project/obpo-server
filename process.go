@@ -128,9 +128,13 @@ func startTask(arch TaskArch, inputFile string, obpoPath string, taskPath string
 	cmd := exec.CommandContext(ctxt, idaPath, "-A", fmt.Sprintf("-S%s %s", obpoPath, taskPath), inputFile)
 	_ = append(cmd.Env, fmt.Sprintf("JSON_PATH=%s", taskPath))
 	err := cmd.Run()
+	_, timeout := ctxt.Deadline()
+	if timeout {
+		return errors.New("process timeout")
+	}
 	if err != nil && err.Error() != "exit status 1" {
 		println("Command error: " + err.Error())
-		return errors.New("excepted exit")
+		return errors.New("obpo except exit")
 	}
 	return nil
 }
@@ -143,13 +147,16 @@ func fileContent(path string) string {
 	return string(bytesRead)
 }
 
-func makeResponse(dir string) Response {
+func makeResponse(dir string, err error) Response {
 	errorMsg := fileContent(filepath.Join(dir, "error"))
 	warnMsg := fileContent(filepath.Join(dir, "warn"))
 	mba := fileContent(filepath.Join(dir, "mba"))
 	code := 0
 	if mba == "" {
-		code = -7
+		code = -6
+	}
+	if err != nil {
+		errorMsg = err.Error() + "\n" + errorMsg
 	}
 	return Response{
 		Code:  code,
@@ -189,7 +196,7 @@ func process(requestJson string) (response Response) {
 		return makeErrorResponse(-5, err.Error())
 	}
 
-	_ = startTask(taskArch, idbPath, obpoPath, taskPath)
+	err = startTask(taskArch, idbPath, obpoPath, taskPath)
 
-	return makeResponse(tmpDir)
+	return makeResponse(tmpDir, err)
 }
