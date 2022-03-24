@@ -128,8 +128,7 @@ func startTask(arch TaskArch, inputFile string, obpoPath string, taskPath string
 	cmd := exec.CommandContext(ctxt, idaPath, "-A", fmt.Sprintf("-S%s %s", obpoPath, taskPath), inputFile)
 	_ = append(cmd.Env, fmt.Sprintf("JSON_PATH=%s", taskPath))
 	err := cmd.Run()
-	_, timeout := ctxt.Deadline()
-	if timeout {
+	if ctxt.Err() == context.DeadlineExceeded {
 		return errors.New("process timeout")
 	}
 	if err != nil && err.Error() != "exit status 1" {

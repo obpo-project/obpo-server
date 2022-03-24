@@ -25,12 +25,12 @@ def _safe_call(f):
 
 def warning(s):
     with open(os.path.join(TASK_DIR, "warn"), 'a') as o:
-        o.write(s + "\n")
+        o.write(s + "\r\n")
 
 
 def error(s):
     with open(os.path.join(TASK_DIR, "error"), 'a') as o:
-        o.write(s + "\n")
+        o.write(s + "\r\n")
 
 
 def visit_blocks(mba: mba_t):
