@@ -132,6 +132,7 @@ def emufinder_hooks():
 
 def patcher_hooks(patcher):
     orig_run = patcher.run
+    orig_id4case = patcher._id4case
 
     def run_hook(edge, flows):
         success = orig_run(edge, flows)
@@ -141,7 +142,22 @@ def patcher_hooks(patcher):
             warning("cannot patch edges from {} to {}".format(_from, _to))
         return success
 
+    def id4case_hook(flows):
+        result = orig_id4case(flows)
+        if result is None:
+            _from = {hex(flow.edge.src.start) for flow in flows}
+            flows = [flow for flow in flows if flow.dest_block != flow.start_block]
+            result = orig_id4case(flows)
+            if result:
+                warning("cut fake branch for {} to {}".format(_from, _from))
+        if result is None:
+            _from = {hex(flow.edge.src.start) for flow in flows}
+            _to = {hex(flow.dest_block.start) for flow in flows}
+            warning("cannot found cases id for {} to {}".format(_from, _to))
+        return result
+
     patcher.run = run_hook
+    patcher._id4case = id4case_hook
 
 
 def prepare():
