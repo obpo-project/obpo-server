@@ -181,7 +181,11 @@ def main():
 
     # Dispatch Analysis
     analyzer = DispatchAnalyzer(mba=mba)
-    for ea in task["dispatchers"]: analyzer.mark_dispatcher(ea)
+    for ea in task["dispatchers"]:
+        try:
+            analyzer.mark_dispatcher(ea)
+        except AssertionError as e:
+            warning(str(e))
     try:
         analyzer.run()
     except:
@@ -211,7 +215,10 @@ def main():
 
     # Clear graph to bypass verify mba
     for b in visit_blocks(mba):
-        if b.type in [BLT_STOP, BLT_XTRN] or b.serial == 0: continue
+        if b.type == BLT_STOP:
+            b.make_lists_ready()
+            continue
+        if b.type == BLT_XTRN or b.serial == 0: continue
         b.type = BLT_NONE
         b.mark_lists_dirty()
 
