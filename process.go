@@ -19,6 +19,15 @@ const (
 	METAPC ArchName = "metapc"
 )
 
+const errorsPath = "errors"
+
+func init() {
+	err := os.Mkdir(errorsPath, 0555)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+}
+
 type TaskArch struct {
 	Arch    ArchName
 	Bit     int
@@ -176,9 +185,22 @@ func process(requestJson string) (response Response) {
 	tmpDir, err := ioutil.TempDir("", "obpo")
 	if err != nil {
 		println("Create tmpdir error: " + err.Error())
-		return makeErrorResponse(-2, "Server internal error")
+		return makeErrorResponse(-2, "Server internal error.")
 	}
-	fmt.Println("TEMP: " + tmpDir)
+
+	defer func() {
+		_ = os.RemoveAll(tmpDir)
+		if response.Code == 0 || len(requestJson) > 1024*1024*2 {
+			return
+		}
+
+		id := time.Now().Unix()
+		path := filepath.Join(errorsPath, fmt.Sprintf("%d_%d.json", response.Code, id))
+		_ = ioutil.WriteFile(path, []byte(requestJson), 0555)
+
+		path = filepath.Join(errorsPath, fmt.Sprintf("%d_%d.err", response.Code, id))
+		_ = ioutil.WriteFile(path, []byte(response.Error), 0555)
+	}()
 
 	idbPath, err := prepareIdb(tmpDir, taskArch)
 	if err != nil {
