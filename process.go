@@ -87,9 +87,11 @@ func makeErrorResponse(code int, error string) Response {
 
 func prepareIdb(dir string, arch TaskArch) (string, error) {
 	binary := getArchBinary(arch)
-	if binary == "" {
-		return "", errors.New(fmt.Sprintf("unsupported current hexrays version(%s) or architecture(%s:%d)",
-			arch.Version, arch.Arch, arch.Bit))
+	_, err := os.Stat(binary)
+	if binary == "" || err != nil {
+		return "", errors.New(
+			fmt.Sprintf("unsupported current hexrays version(%s) or architecture(%s:%d), "+
+				"please see: github.com/obpo-project/obpo-plugin", arch.Version, arch.Arch, arch.Bit))
 	}
 
 	idbPath := filepath.Join(dir, "binary")
@@ -98,7 +100,7 @@ func prepareIdb(dir string, arch TaskArch) (string, error) {
 	} else {
 		idbPath += ".idb"
 	}
-	err := fileCopy(binary, idbPath)
+	err = fileCopy(binary, idbPath)
 	if err != nil {
 		println("Copy binary error: " + err.Error())
 		return "", errors.New("server internal error")
