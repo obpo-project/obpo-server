@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"time"
 )
 
@@ -45,6 +46,17 @@ func GetOBPOScriptPath() string {
 		return path
 	}
 	panic("Cannot found OBPO_PATH.")
+}
+
+func GetOBPOTimeout() int {
+	env := os.Getenv("OBPO_TIMEOUT")
+	if env != "" {
+		timeout, err := strconv.Atoi(env)
+		if err == nil {
+			return timeout
+		}
+	}
+	return 60
 }
 
 func getArchBinary(arch TaskArch) string {
@@ -134,7 +146,7 @@ func startTask(arch TaskArch, inputFile string, obpoPath string, taskPath string
 		idaPath = filepath.Join(arch.Version, "idapro", "ida64.exe")
 	}
 
-	ctxt, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctxt, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(GetOBPOTimeout()))
 	defer cancel()
 	cmd := exec.CommandContext(ctxt, idaPath, "-A", fmt.Sprintf("-S%s %s", obpoPath, taskPath), inputFile)
 	_ = append(cmd.Env, fmt.Sprintf("JSON_PATH=%s", taskPath))
