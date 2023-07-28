@@ -1,0 +1,26 @@
+name: Go
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Generate build files
+      uses: thatisuday/go-cross-build@v1.1.0
+      with:
+          platforms: 'windows/amd64'
+          name: 'obpo-server-${{ github.ref_name }}'
+          dest: 'dist'
+    - name: Release
+      uses: softprops/action-gh-release@v0.1.14
+      with:
+        tag_name: ${{ github.ref_name }}
+        files: dist/*
